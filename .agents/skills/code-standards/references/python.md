@@ -1,54 +1,26 @@
-# Python-Specific Standards
+# Python Standards
 
-Applies on top of [`common.md`](common.md) (code) and [`testing.md`](testing.md) (tests). Wins for Python-specific mechanics only — link § upstream, never restate.
+Applies on top of [common.md](common.md) for code and [testing.md](testing.md) for tests. Repository configuration owns supported Python versions and tooling.
 
-## Closed value sets: `Enum` over `Literal`
+## Closed value sets
 
-Use `enum.StrEnum` (Python ≥3.11) or `enum.Enum` for value sets that:
+Use `enum.StrEnum` (Python 3.11+) or `enum.Enum` when values cross module boundaries, exist at runtime, or may gain behavior. Use `Literal[...]` for local type narrowing where no runtime value object is needed.
 
-- Are referenced at runtime (compared, iterated, displayed, serialized).
-- Cross module boundaries as part of a public contract.
-- Have any chance of growing semantics (a display name, ordering, parsing rules, JSON aliases).
-
-`Literal[...]` is for type-narrowing within a single module or as a structural type hint on data the type system never *constructs*. It is not the public contract for runtime values.
-
-```text
-# bad: Literal as the cross-module contract
-LabelName = Literal["win", "loss", "active_or_ambiguous", "unlabeled"]
-
-class OrderRecord(BaseModel):
-    label: LabelName
-
-# elsewhere — magic strings everywhere
-if row.label == "win": ...
-elif row.label == "loss": ...
-
-# good: Enum carries semantics and prevents magic strings
+```python
 class LabelName(StrEnum):
     WIN = "win"
     LOSS = "loss"
-    ACTIVE_OR_AMBIGUOUS = "active_or_ambiguous"
-    UNLABELED = "unlabeled"
+
 
 class OrderRecord(BaseModel):
     label: LabelName
-
-# elsewhere — the enum is the contract
-if row.label is LabelName.WIN: ...
 ```
 
-## Behavior contracts: ABC over Protocol
+## Behavior contracts
 
-Behavior contracts with multiple implementations use `abc.ABC` + `@abstractmethod`, not `typing.Protocol`. Nominal typing: missing methods fail at instantiation, not at the type checker's mercy; `grep "Converter)"` finds every implementation.
+Use `abc.ABC` and `@abstractmethod` for owned runtime polymorphism with multiple implementations. Use `Protocol` for structural contracts, especially third-party objects the project does not own. A single implementation uses its concrete type until another implementation or volatile boundary earns an abstraction.
 
-`Protocol` is for typing third-party or structural shapes you don't own — not for contracts this codebase defines and implements.
-
-```text
-# bad: structural contract for owned implementations — checker-only, invisible inheritance
-class Converter(Protocol):
-    def convert(self, source: Path) -> ConversionResult: ...
-
-# good: nominal contract — fail-fast, grep-able
+```python
 class Converter(ABC):
     @abstractmethod
     def convert(self, source: Path) -> ConversionResult: ...
@@ -56,35 +28,28 @@ class Converter(ABC):
 
 ## Settings
 
-- Every `BaseSettings` field has a default. A missing env var must never crash construction — required fields make *any* consumer of the settings class fail, including code that reads one unrelated field.
-- Classes never call `get_xxx_settings()` inside methods. House pattern: optional-injected constructor — `def __init__(self, settings: XSettings | None = None): self._settings = settings or get_xxx_settings()`. Wiring happens at composition roots (boot, registry, `Depends()`), not deep in call stacks.
+- Required runtime values and secrets have no defaults; fail at the composition root when they are absent.
+- Defaults represent values safe and valid in every environment, not placeholders that let misconfiguration boot.
+- Construct settings at a composition root and inject them. Domain methods do not read global settings getters.
 
-## OOP-first module layout
+```python
+class AppSettings(BaseSettings):
+    api_key: SecretStr
+    request_timeout_seconds: float = 10.0
+```
 
-Module top-to-bottom:
+## Module ownership
 
-1. Imports.
-2. Module-level constants (no docstrings — see [`common.md §API documentation`](common.md#api-documentation-concise-or-absent)).
-3. The class(es) that own the module's behavior.
-4. Free functions only when they are the module's public API or are class-independent.
-
-A method that calls a `_helper(...)` defined at module scope is a smell. The helper is a private method. See [`common.md §Behavior on a class lives on the class`](common.md#behavior-on-a-class-lives-on-the-class).
+Order modules for reading: imports, constants, public types and behavior, then private helpers near their owner. Prefer functions for stateless behavior and methods for behavior that owns class state or invariants. Keep a helper on its class when it operates on that class's state or invariant; keep a class-independent transformation as a module-private function.
 
 ## Pydantic models
 
-- Validators get a docstring only when the invariant isn't obvious from the validator name.
-- Use `model_validator(mode="after")` and name the method after the invariant: `_outcome_label_matches_status` is good; `_validate` is not.
-- Cross-field invariants belong on the model. If you find yourself enforcing them in a stage or service, the model is missing a validator.
+- Put cross-field invariants on the model.
+- Use `model_validator(mode="after")` and name validators after the invariant.
+- Add a validator docstring only when its name cannot carry the invariant.
+- Convert wire DTOs at the boundary with `to_domain()` and `from_*()` methods or one explicit adapter.
 
-```text
-# bad: docstring restates the model
-class OrderRecord(BaseModel):
-    """A raw row plus the rule-based label and structured note signals."""
-
-    label: LabelName
-    label_status: LabelStatus
-
-# good: silent model — name + types tell the story
+```python
 class OrderRecord(BaseModel):
     label: LabelName
     label_status: LabelStatus
@@ -95,54 +60,34 @@ class OrderRecord(BaseModel):
 
 ### API boundary DTOs
 
-Request/response models in dedicated schema package. Conversion on the model — `to_domain()` / `from_*()`. No inline dict munging.
-
-Shared internal domain shapes also live in the schema package (`models/`) for this project; service-local types stay in the owning module. → [`fastapi.md §models/ — type placement`](fastapi.md#models--type-placement)
+Request and response models live at the API boundary selected by the repository. Service-local types stay with the service; shapes shared across boundaries have one model owner. See [FastAPI type placement](fastapi.md#type-placement).
 
 ```python
-# bad
-def score(body: dict) -> dict:
-    domain = DomainInput(id=body["id"], features=body["features"])
-
-# good
 def score(body: ScoreRequest) -> ScoreResponse:
     return ScoreResponse.from_result(service.score(body.to_domain()))
 ```
 
 ## Type ergonomics
 
-- Use builtin generics (`list[T]`, `dict[K, V]`, `tuple[T, ...]`); reach for `typing` only when you need protocols, generics with bounds, or `Self`.
-- `Any` is allowed at the *very* edge (deserializing untrusted JSON) and only there. Validate into a typed model immediately.
-- Generic type variables (`T`, `T_co`, etc.) must have at least one parameter the caller can bind. An unbound generic is `Any` in disguise.
+- Use builtin generics: `list[T]`, `dict[K, V]`, `tuple[T, ...]`.
+- Accept `Any` only at an untyped edge; validate or narrow it immediately.
+- Every type variable must be inferable from an input or bound by the declaration.
 
-```text
-# bad: T can't be bound by any caller
-def latest[T](rows: list[Row], field: str) -> T | None: ...
-
-# good: T is inferred from `default`
+```python
 def latest[T](rows: list[Row], field: str, default: T) -> T: ...
-
-# also good: drop the generic
-def latest(rows: list[Row], field: str) -> Row | None: ...
 ```
 
-## Tests
+## Pytest
 
-→ [`testing.md`](testing.md). Python/pytest deltas only:
+Follow the repository's existing test layout and markers. When no convention exists:
 
-- Register `unit`, `integration`, `e2e`, `smoke` markers in `[tool.pytest.ini_options].markers` (`pyproject.toml`).
-- `@pytest.mark.smoke` lives on tests in `tests/<package>/e2e/` — not a sibling `smoke/` directory. CI: `pytest -m smoke` vs `pytest -m "e2e and not smoke"`.
-- Layout: `tests/<package>/{unit,integration,e2e}/` — package-root fitness/contract tests (e.g. import boundaries, bundled artifacts) sit beside those dirs; `e2e/` optional until critical user journeys ship (marker registered; empty suite OK in CI).
-- `@pytest.mark.parametrize` for table-driven tests; `@pytest.fixture` + nearest `tests/<package>/<unit|integration|e2e>/conftest.py` for shared setup.
-- `tmp_path` for filesystem fixtures — never relative paths or `/tmp/...`.
-- `pytest.raises` when error type/message is the behavior.
-- `pytest-asyncio` with `asyncio_mode = "auto"` when tests are `async def`.
-- Import boundaries: opt-in `lint-imports` contracts — one forbidden edge per rule:
+- distinguish unit, integration, E2E, and smoke tests by scope;
+- use `@pytest.mark.parametrize` for repeated input/output cases;
+- put shared setup in the nearest `conftest.py` that owns it;
+- use `tmp_path` for filesystem tests;
+- use `pytest.raises(..., match=...)` when the error is the behavior; and
+- register every custom marker in `pyproject.toml`.
 
-```ini
-[importlinter:contract:billing-no-catalog]
-name = billing must not import catalog
-type = forbidden
-source_modules = myapp.services.billing
-forbidden_modules = myapp.services.catalog
-```
+Use async test support already selected by the repository. Add `pytest-asyncio` only when async tests require it.
+
+Import-boundary checks are opt-in after layer edges stabilize. Keep one named forbidden edge per contract and enforce it outside production code.

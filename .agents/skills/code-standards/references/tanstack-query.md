@@ -4,16 +4,19 @@ Applies on top of [react-typescript.md](react-typescript.md).
 
 ## Query keys
 
-Query-key factories are API cache contracts. Keep one `queryKeys` object per API domain under `api/`; split by domain when that file grows. Use `as const` for arrays and the factory object.
+Query-key factories are API cache contracts. Keep one factory per API domain beside that domain's API client. Use a shared root prefix so broad invalidation includes lists and details. Use `as const` for every key.
 
 ```ts
 export const queryKeys = {
-  items: ["items"] as const,
-  item: (id: string) => ["item", id] as const,
+  all: ["items"] as const,
+  lists: () => [...queryKeys.all, "list"] as const,
+  list: (filters: ItemFilters) => [...queryKeys.lists(), filters] as const,
+  details: () => [...queryKeys.all, "detail"] as const,
+  detail: (id: string) => [...queryKeys.details(), id] as const,
 } as const;
 ```
 
-Keys are resource-named. `['items']` does not invalidate `['item', id]`; mutations invalidate every related key explicitly.
+Invalidate the narrowest prefix that restores consistency. `queryKeys.all` invalidates the whole domain; `queryKeys.lists()` leaves details intact.
 
 ## Hooks
 
@@ -21,7 +24,7 @@ Query and mutation hooks wrap `useQuery` and `useMutation` under `hooks/`; deriv
 
 ```ts
 export function useItems() {
-  return useQuery({ queryKey: queryKeys.items, queryFn: listItems });
+  return useQuery({ queryKey: queryKeys.lists(), queryFn: listItems });
 }
 ```
 
@@ -37,9 +40,11 @@ export function useUpdateItem() {
 
   return useMutation({
     mutationFn: updateItem,
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.item(variables.id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.items });
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.detail(variables.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.lists() }),
+      ]);
     },
   });
 }
@@ -47,7 +52,7 @@ export function useUpdateItem() {
 
 ## QueryClient
 
-Create the `QueryClient` in the application's provider module and pass it through `QueryClientProvider`. Keep its defaults in that same owner.
+Create one browser `QueryClient` in the application's provider module and pass it through `QueryClientProvider`. Server-rendered applications follow their framework's request-isolation pattern.
 
 ## Tests
 

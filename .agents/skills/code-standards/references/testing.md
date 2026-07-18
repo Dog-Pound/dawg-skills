@@ -1,346 +1,120 @@
 # Testing Standards
 
-Test quality Single Source of Truth — top-level sibling to [`common.md`](common.md).
+Language-neutral test-quality baseline. Language and framework overlays own runner syntax, markers, directories, and boundary-specific fixtures.
 
-## Test levels by scope
+## Choose the seam by failure mode
 
-Classify tests by **what they touch**, not how fast they run.
-
-| Level | Scope | Example |
+| Level | Scope | Proves |
 |---|---|---|
-| **Unit** | One module; public interface only | `modulePublicEntrypoint(input)` → expected output |
-| **Integration** | Crosses module boundaries in-process | In-process HTTP client hitting router + handler + injected deps |
-| **E2E** | Full stack or external systems | Live API, browser, real database |
+| Unit | One public module contract with controlled inputs | Local behavior and edge cases |
+| Integration | Crosses one or more real in-process or infrastructure boundaries | Components are wired and exchange the right data |
+| E2E | Full deployed stack, browser, or live system boundary | A critical user journey works in its real shape |
 
-A test that imports two internal modules and wires them together is integration even if it finishes in milliseconds. Tag cross-unit tests by scope; tag syntax → language overlay.
+Use the cheapest seam that fails for the risk under test. Crossing two internal modules is integration even when it runs quickly; exercising an HTTP-shaped function in memory is not automatically E2E.
 
-## Layer job matrix
+Before adding a test, name the behavior, observable seam, and failure it should catch. The test belongs at that seam when a plausible broken implementation fails it and lower-level coverage cannot prove the same contract more cheaply.
 
-Pick layer by **failure mode**, not assertion strength.
+## Arrange, act, compare
 
-| Layer | Proves | Does not prove |
-|---|---|---|
-| **Unit** | Module behavior on controlled inputs | Correct prod config or bundled artifact shipped |
-| **Integration** | Route → handler → store/service → JSON; DB/HTTP boundaries | Artifact identity, column inventory, env constants |
-| **E2E** | Critical user journeys on live stack; `<5%` of total test count | Endpoint coverage; every metadata field; duplicate integration coverage |
-
-Cross-link: [common.md § No raw dicts, no magic strings](common.md#no-raw-dicts-no-magic-strings).
-
-## Integration flavors
-
-One `@pytest.mark.integration` marker; two flavors:
-
-| Flavor | Real boundary | Stub OK at edge |
-|---|---|---|
-| **In-process** | `TestClient` + lifespan; route → handler → store → JSON; bundled artifact on disk | In-memory stores, store-reset helper for readiness |
-| **External-dep** (when added) | Postgres + rollback; `respx` at httpx boundary | Everything except that boundary |
-
-Integration ≠ mock-free. **Narrow:** one real boundary; stub everything else at the edge. Over-mock = every collaborator faked → unit test in costume. Signal: *if the real boundary breaks, does this test fail?*
-
-| Boundary | In-process route tests today | Stub OK |
-|---|---|---|
-| HTTP + app graph | `TestClient(build_app())` | — |
-| Bundled model/config artifact | On disk | — |
-| Domain persistence | — | `InMemory*Store` |
-| Readiness scenarios | — | Store-reset helper, `InMemoryModelStore(unloaded)` |
-| Postgres | N/A | When added: real SQL only — never mock session |
-
-When DB, queues, or outbound HTTP ship: use testcontainers + Alembic migrations, `respx` or wrapper fakes, wait-with-timeout (not `sleep`), builders-not-seeds. Zero flake budget → [§Flake](#e2e).
-
-## Route integration
-
-HTTP wiring tests: one `(status, body) == expected`. Build `expected` from the **dependency the handler uses**, via the response DTO — not hardcoded prod data, not a re-read of the file the store already loaded.
-
-Timestamps and runtime IDs: derive from store/service in `expected`, not from the response (self-referential `expected.ts = response.body.ts` passes when both are wrong). Freeze time in unit tests when determinism is the behavior.
+Make expected values independent from the output under test.
 
 ```text
-// bad — inventories bundled artifact on route
-verify client.get("/v1/model").body.feature_count == 27
+input = controlledInput()
+expected = ExpectedResult(...)
 
-// good — route wiring: same path as handler
-expected = ResponseDto.fromDomain(getDomainStore().getMetadata()).toJson()
-verify (response.status, response.json()) == (200, expected)
+actual = publicEntrypoint(input)
 
-// good — bundled inventory: contract test or promotion script, not route
+verify actual == expected
 ```
 
-## Source-of-truth in expected values
+Derive expected values from the contract or controlled dependency input—not by rereading the implementation's source or copying fields from `actual`.
 
-| Situation | Pattern |
-|---|---|
-| Route returns store/service state | Expected from that dependency via response DTO — see [Route integration](#route-integration) |
-| Spec: "field X from configured file" | Unit test on the loader — not route test |
-| Spec: "bundled artifact must be v1" | Contract test, promotion script, or CI checksum |
-| Reviewer asks for pinned inventory on route | Contract test — not integration route |
+Prefer whole-value equality when the full result is deterministic and meaningful. Multiple assertions are fine when they describe facets of one outcome; split the test when the properties represent independent behaviors.
 
-**Do** hardcode in unit tests when the fixture is the source of truth.
+Use the strongest meaningful assertion:
 
-## Agent-era failures
+- exact values for deterministic output;
+- typed error plus stable message/code when failure is the contract;
+- structural or bounded assertions only for genuinely nondeterministic output; and
+- a golden file for large third-party-generated output where the complete diff is the review surface.
 
-Common patterns that produce green suites and broken software:
-
-- **Liar tests** — checks so weak (`is not null`, `length > 0`) that wrong implementations pass. Fix: compare `actual` to a constructed `expected`.
-- **Implementation mirror** — tests verify internal call order, private method names, or mock interaction counts instead of observable behavior. Fix: test the public contract; rename tests to describe behavior, not mechanism.
-- **Coverage theater** — tests written to hit lines, not behaviors. Fix: one behavior per test; delete tests that duplicate the same rule at a different layer.
-- **Layer mismatch** — route test asserts inventory or asset identity (e.g. `feature_count == 27`). Fix: contract test, promotion script, or CI; route tests stay on wiring.
-- **Mislabeled TestClient as E2E** — in-process HTTP is integration. Fix: relabel `@pytest.mark.integration`; reserve `@pytest.mark.e2e` for live stack.
-- **E2E coverage theater** — one test per endpoint on live stack. Fix: critical journeys only; route wiring stays integration.
-- **Flake tolerance on browser/network E2E** — `@retry`, quarantine, or "known flaky." Fix: zero flake budget — fix root cause or delete (see [§E2E Flake](#e2e) for the SSOT rule).
-- **Shared mutable seed data** — E2E tests depend on manual DB state. Fix: create via API, UUID-namespace per run.
-- **`sleep` for readiness** — fixed delay instead of polling. Fix: a project polling helper or bounded poll with timeout.
-- **Slow E2E suite gating PRs** — 30-min suite blocks merges. Fix: smoke post-deploy, full E2E nightly.
-
-## E2E
-
-Write E2E only when **all three** gates pass:
-
-- **Critical journey** — production failure would block users or revenue; not already covered by unit + integration.
-- **Unit + integration can't catch** — failure mode needs live stack, browser, or real external boundary.
-- **Willing to maintain** — team owns data setup, env, and flake fixes; no orphan suite.
-
-**Test data**
-
-- Create via API — never depend on shared seed rows or manual DB state.
-- Namespace with UUIDs — names, emails, org slugs unique per run; parallel-safe.
-
-**Determinism**
-
-- Poll with timeout using the project's polling helper or a bounded poll; never use `sleep` for readiness.
-- Sandbox externals — stub or point at test doubles; no live vendor calls in CI.
-
-**Flake**
-
-- Zero tolerance — fix root cause or delete the test.
-- No `@retry`, no permanent quarantine, no "known flaky" backlog.
-
-Browser E2E → [react-typescript.md § Frontend testing](react-typescript.md#frontend-testing).
-
-## Smoke vs full E2E
-
-**Smoke** — post-deploy gate, `<2` min:
-
-- Mark with `@pytest.mark.smoke` on tests in `tests/<package>/e2e/` — no sibling `tests/smoke/` directory.
-- Run: `pytest -m smoke` after deploy.
-
-**Full E2E** — nightly or pre-release:
-
-- Run: `pytest -m "e2e and not smoke"`.
-
-**Synthetic prod smoke** — schedule smoke against prod with a dedicated synthetic user; no vendor-specific account list in docs.
-
-**E2E checklist** — anti-patterns and fixes → [§Agent-era failures](#agent-era-failures).
-
-- [ ] All three when-to-write gates pass
-- [ ] Tagged `@pytest.mark.e2e` (smoke tests also `@pytest.mark.smoke`)
-- [ ] Lives under `tests/<package>/e2e/` — not `tests/smoke/`
-- [ ] Data created via API; UUID-namespaced
-- [ ] Polls with timeout — no `sleep`
-- [ ] Externals sandboxed in CI
-- [ ] Zero `@retry` and zero quarantine
-- [ ] `<5%` of total test count
-- [ ] Smoke runs post-deploy; full E2E nightly/pre-release
-- [ ] Browser journeys cross-linked to frontend testing overlay
-
-## Stubs and mocks
-
-| Kind | Role | Assert |
-|---|---|---|
-| **Stub** | Returns canned data — no side effects | Never assert call count or `called` |
-| **Mock** | Simulates outbound side effect (HTTP, email) | Assert observable outcome, not interaction count |
-
-**Anti-patterns**
-
-| Pattern | Fix |
-|---|---|
-| Assert `stub.foo.called` | Test return value instead |
-| `sleep` / polling in unit test | Deterministic fake or dependency override |
-| Conditional assert | One code path per test |
-| Unit test >100ms | Move to integration or shrink fixture |
+Inject clocks, random generators, and ID factories when their values are part of the behavior. When injection adds more design cost than signal, assert the stable contract around the nondeterministic field.
 
 ## One behavior per test
 
-Each test verifies one input/output pair. Name the test so it reads as a sentence describing the input and expected behavior; follow the project's test-naming idiom. If a test verifies multiple unrelated properties, split it into multiple tests.
+One behavior means one input/output contract, not one assertion or field. Consolidate related fields into one expected structure; split unrelated outcomes.
 
 ```text
-// bad: three behaviors in one test
-test("report service produces summary, totals, and row count") {
-  result = ReportService(settings).run()
-  verify result.summaryPath.exists()
-  verify result.totalAmount == 1000
-  verify result.rowCount == 40
-}
-
-// good: one behavior per test, clear name
-test("report service writes summary output") { ... }
-test("report service total matches input sum") { ... }
-test("report service row count matches input") { ... }
-```
-
-**Reconcile with expensive fixtures:** "One behavior" means one I/O contract, not one field or attribute. When a fixture is expensive (runs a full pipeline, calls an external service), don't fragment into one-property-per-test for basic structural checks — consolidate into a single `result == expected`. "Report produces the expected status set and totals" is one behavior, not four weak membership tests.
-
-```text
-// bad: four weak tests for one behavior
-test("has status active", summary) { verify summary.statuses.contains(Status.ACTIVE) }
-test("row count non-zero", summary) { verify summary.rowCount > 0 }
-
-// good: one test, full expected shape
-test("report summary", summary) {
-  result = { statuses: sort(summary.statuses), rowCount: summary.rowCount }
-  expected = { statuses: sort([Status.ACTIVE, Status.PENDING]), rowCount: 42 }
-  verify result == expected
+test("report summarizes statuses and totals") {
+  expected = { statuses: [ACTIVE, PENDING], total: 42 }
+  actual = summarize(rows)
+  verify actual == expected
 }
 ```
 
-## Assert hierarchy
+Name tests after behavior and conditions, not internal method calls. A refactor that preserves the public contract should not force test renames.
 
-Default: **one behavior, prefer one `actual == expected`** with structured expected values.
+## Public contracts
 
-Multi-assert OK when facets of the **same outcome** and a single equality is awkward — still one behavior. Split when properties are independent ("and" in the test name).
+Exercise public functions, methods, routes, events, rendered behavior, or outbound effects. Private helpers are implementation; reach them through the owning public contract unless the helper has become a real module boundary.
 
-Do not scatter weak checks (`is not null`, `> 0`) across attributes — build `expected` and compare.
+Avoid implementation mirrors: call-order assertions, private names, or mock counts are valid only when ordering or cardinality is itself an externally visible contract.
 
-Documented exceptions — use only when equality on the whole result is awkward:
+## Test doubles
 
-| Exception | When | Pattern |
-|---|---|---|
-| Expected error | Error type/message is the behavior | expect invocation throws ValidationError |
-| Status + body | HTTP wiring tests | verify (statusCode, parsedBody) == (422, expectedBody) |
-| Stochastic floor | Non-deterministic output (e.g. model AUC) | verify score >= floor — deterministic values still use `==` |
+| Double | Use |
+|---|---|
+| Stub/fake | Supply controlled data or a deterministic in-memory boundary |
+| Mock/recorder | Observe an outbound effect that has no cheaper public observation |
 
-```text
-// bad: implicit checks spread across attributes
-test("processor groups by key") {
-  records = Processor().run(rows)
-  recordsByKey = indexBy(records, r => r.key)
-  verify recordsByKey["A"].count == 2
-  verify recordsByKey["B"].count == 1
-}
+Replace dependencies at the narrowest owned boundary. Keep one real boundary per integration test when possible so failures identify the broken contract.
 
-// good: build the expected, compare equality
-test("processor groups by key") {
-  rows = [inputRow("A"), inputRow("A"), inputRow("B")]
-  expectedCounts = { "A": 2, "B": 1 }
-
-  actualCounts = mapValues(
-    Processor().run(rows),
-    r => ({ key: r.key, count: r.count })
-  )
-
-  verify actualCounts == expectedCounts
-}
-```
-
-The pattern states the expected shape up front, catches unintended side effects (extra keys, wrong types) automatically, and reads as arrange → act → verify without scanning for checks.
-
-### Weak assertions are not `result == expected`
-
-Default: every unit test's final assertion is whole-value `result == expected`. Partial-field, membership (`in`), or attribute-picking asserts are blockers, not style choices.
-
-Only two exceptions:
-
-1. `pytest.raises` (or equivalent) — the exception IS the expected value; assert on the match pattern, not a whole-object comparison.
-2. Nondeterministic fields (timestamps, generated ids) — echo the actual value into the expected object with a `# nondeterministic; echoed` comment, then sanity-check that field separately (e.g. `tzinfo`). No freezing libraries for a single test.
-
-The following are anti-patterns — they prove something happened, not that the right thing happened:
-
-```text
-// bad: existence checks
-verify count > 0
-verify result != null
-verify items.length > 0
-
-// bad: membership checks when you know the full set
-verify names.contains(Status.B)
-verify columns.contains("feature_a")
-
-// good: verify the concrete expected value
-verify count == 4997
-verify names == [Status.A, Status.B]
-verify columns == ["feature_a", "feature_b", "feature_c"]
-```
-
-## Golden files for third-party-generated output
-
-Output produced by a library you don't control (markdown renderers, PDF extractors, serializers) is tested by equality against a committed golden file — not by fragment/`contains` asserts scattered over the output.
-
-- Goldens live in `expected/` next to the fixtures; test body is `assert result == ConversionResult(markdown=golden("name.md"), warnings=[])`.
-- Re-blessing a golden is a conscious, reviewable commit — library upgrades churn goldens on purpose; the diff **is** the review.
-- Fragment asserts (`"| Client |" in markdown`) prove a substring survived, not that the output is right — they silently pass through reordered, duplicated, or truncated output.
-
-## Public API only
-
-Tests call **public** functions, methods, and route endpoints. Never call private helpers (e.g. `obj._privateMethod()`) — test through the module's public entrypoint.
-
-```text
-// bad: testing private merge logic through internal access
-test("merge delta combines scores") {
-  verify service._mergeDelta(a, b) == expected
-}
-
-// good: test through public entrypoint
-test("service normalizes rows") {
-  verify service.run(input) == expected
-}
-```
-
-Route handlers and exported entrypoints are public; private helpers inside a module are not test targets.
+For outbound effects such as email or HTTP, assert the recorded request or resulting state. Assert call count only when duplicate delivery is a product failure.
 
 ## Table-driven tests
 
-When the same `actual == expected` pattern repeats across inputs, use a table of cases instead of copy-pasting tests with one input swap. Each row is one behavior; the test body stays identical.
+When arrange/act/compare repeats with only inputs and expected outputs changing, use the runner's parameterized/table form. Each row remains one named behavior; the body remains one contract.
 
-Principle: one test function (or equivalent), many input/expected pairs, no duplicated arrange/act logic. Table syntax and runner mechanics → language overlay.
+## Shared setup
 
-## Shared test setup
+Keep setup local while one test owns it. Promote factories, builders, and fixtures to the nearest shared test owner after a second use. Shared setup exposes intent through domain names and returns fresh mutable state per test.
 
-Reusable factories, builders, sample data, and any helper used by more than one test belong in a **shared test setup location**, not inline next to tests. A test file should contain tests, not test infrastructure.
+Prefer builders and public APIs over shared seed state. Parallel tests namespace external data and clean up only what they own.
 
-- Shared setup for unit tests in a package → one shared location for that package's unit tests.
-- Shared setup for integration tests → one shared location for that package's integration tests.
-- Inline helper inside a test file is allowed only when it's used by exactly one test in that file.
+## Integration tests
 
-Exact directory layout, file names, and injection mechanics → language overlay.
+An integration test makes its real boundary explicit: application graph, database schema, filesystem artifact, message broker, or outbound HTTP adapter. Stubbing other boundaries keeps the failure focused.
 
-```text
-// bad: builder defined inline, used by every test in the file
-function inputRow(key, ...) { ... }
+Use production serialization, migrations, and adapters at the selected real boundary. Do not mock the database library while claiming to test database integration.
 
-test("processor handles first key") { inputRow("A") ... }
-test("processor handles second key") { inputRow("B") ... }
+## E2E and smoke
 
-// good: builder lives in shared test setup and is injected per test
-// shared-setup/rowFactory(...)
-test("processor handles first key", rowFactory) {
-  rows = [rowFactory(key: "A")]
-  ...
-}
-```
+Write E2E when all three gates pass:
 
-## No comments on test constants or fixtures
+1. production failure blocks a critical user or business journey;
+2. lower layers cannot catch the failure; and
+3. the team owns environment, data, artifacts, and flake repair.
 
-The fixture or constant name carries the intent. If it doesn't, rename. Do not annotate test data with explanatory prose — it drifts the moment the data changes.
+Keep a fast smoke subset for deployment health and a broader suite for scheduled or release validation when runtime cost requires the split.
 
-## Import boundary tests
+- Create isolated test data through supported interfaces.
+- Poll asynchronous outcomes with a bounded timeout instead of sleeping.
+- Sandbox vendors unless the vendor boundary is the contract under test.
+- Capture logs, traces, responses, screenshots, or HAR before teardown.
+- Fix deterministic flakes at the root. Quarantine only as a short, owned incident response with an expiry.
 
-Opt-in fitness function — only when layer edges are **stable**. While layout is still moving, skip.
+## Failure patterns
 
-One forbidden edge per contract; failure names the rule. Enforce at test/CI — not with runtime import guards in production code. Tooling (Import Linter, dependency-cruiser, ArchUnit, etc.) → language overlay.
+| Pattern | Why it lies | Replacement |
+|---|---|---|
+| Existence-only assertion | Wrong output still passes | Compare the expected value or shape |
+| Coverage test | Executes lines without proving behavior | Name and assert the contract |
+| Implementation mirror | Refactors break while behavior survives | Test the public seam |
+| Layer mismatch | Proves a different risk than claimed | Move to the owning layer |
+| Shared mutable seed | Order and parallelism change results | Create namespaced data per run |
+| Fixed readiness sleep | Timing differs across environments | Poll the observable condition with timeout |
+| Conditional assertion | A branch can skip verification | One explicit expected outcome per case |
 
-```text
-// bad — runtime guard in production code
-if (callerIsCatalog(importingModule)) {
-  throw new Error("billing must not import catalog")
-}
+## Import boundaries
 
-// good — one named contract per forbidden edge (enforced by CI tooling)
-// rule: billing must not import catalog
-// sources = myapp.services.billing
-// forbidden = myapp.services.catalog
-```
-
-## Test names describe the behavior, not the mechanism
-
-`decided label wins over excluded` — good (states the rule).
-`choose label row returns decided first` — bad (describes the implementation).
-
-When the implementation changes, behavior-named tests stay valid; mechanism-named tests have to be renamed.
+Use an import/dependency fitness test only after the boundary is stable and important enough to enforce. Keep each forbidden edge named and machine-checkable in test or CI tooling, never as a runtime guard in production code.

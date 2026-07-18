@@ -1,461 +1,128 @@
-# Coding Principles — Common (Language-Neutral)
+# Common Code Standards
 
-> **Single source.** Code quality SSOT. Sibling baseline to [`testing.md`](testing.md). Overlays link § only — never restate.
+Language-neutral baseline. Stack overlays add mechanics; repository patterns decide concrete placement.
 
-## Naming
+## Start from the owner
 
-### Names and types tell the story
+Trace the requested behavior through its callers, data boundaries, and effects. Search for the module that already owns the relevant invariant or dependencies. Extend that owner when it keeps the interface coherent; create a boundary only when the existing owner cannot hide the new complexity cleanly.
 
-The signature is the documentation. A reader should skim **name + parameter names + parameter types + return type** and know what the function does without opening the body. Where the language has a type system, type annotations are not optional decoration — they are half the signal. Untyped parameters, untyped returns, and `any` / `dict` / `Object` blobs erase it — treat them as anti-patterns, not shortcuts.
+Plans, tickets, and workflow stages describe intent. They do not automatically justify matching files, classes, services, or layers.
 
-If the signature does not narrate the work, rename it, type it, or split it. Reaching for prose to explain the function is a design smell; do not paper over it with a comment or public-surface doc (see [§API documentation: concise or absent](#api-documentation-concise-or-absent)).
+## Names and contracts
 
-```text
-// bad: untyped, vague names, no return type — signature tells you nothing
-process(x, y)
+Names, types, and signatures should expose the contract without requiring implementation lookup.
 
-// bad: typed but vague
-process(x: Map, y: int) -> Map
+- Name values for their domain role: `invoice_rows`, not `data`; `retry_deadline`, not `timeout` when the distinction matters.
+- Type public inputs, outputs, and model fields in typed languages. Keep escape hatches at the untyped boundary and explain why they are necessary.
+- Use domain types when primitive values have different rules or units.
+- Mark the public/internal boundary with the language's normal mechanism.
+- Keep one stable public import path per symbol. Re-export through an intentional package API or import from the owning module, not both.
 
-// good: name + types describe the full contract
-calculateCompoundInterest(
-  principal: Money,
-  annualRate: Percentage,
-  years: int,
-) -> Money
-```
+Short local names are fine when their meaning is obvious from a small scope. Do not inflate names to repeat context the module already supplies.
 
-Where types exist, use them on every public function and every model field. "I'll type it later" is how untyped blobs propagate across a codebase.
+## Functions and control flow
 
-### No vague names
+A function should represent one coherent operation at one level of abstraction. Split it when independent reasons to change, failure policies, or effects are tangled—not to satisfy a line-count rule.
 
-Names like `data`, `info`, `manager`, `helper`, `util`, `do_thing`, and `temp` carry no signal by themselves. Replace or qualify them with the concrete role.
+- Prefer guards and extracted named operations when they make the main path easier to scan.
+- Use the language's clearest native control flow. An exhaustive match, a short conditional, polymorphism, or a dispatch table can each be right.
+- Keep resource and transaction lifecycles structurally paired with context managers, scoped callbacks, or equivalent constructs when the language supports them.
+- Put helpers with the state or operation they serve. A private method, module-private function, or small local function is chosen by repository idiom and ownership, not dogma.
 
-```text
-// bad
-handle(data)
+Comments do not compensate for tangled control flow. Make the code legible first.
 
-// good
-normalizeInvoiceRows(rawInvoiceRows)
-```
+## Deep modules
 
-### Names carry their meaning without lookup
+A deep module exposes a small, stable interface while hiding meaningful policy, data structure, integration, or lifecycle complexity. Depth is a value-to-interface ratio, not a request for large files or speculative behavior.
 
-A name is wrong if the reader must open another file — or the instantiation site — to know what it holds. Qualify ambiguous nouns: `file_extensions`, not `extensions`; `pip_distribution`, not `distribution`; `min_text_chars_per_page`, not `threshold`. Short generic names are only acceptable when the enclosing scope fully disambiguates them (a loop variable, a comprehension).
+Prefer boundaries that:
 
-```text
-// bad: what kind of distribution? statistical? linux?
-distribution: str
+- hide volatile decisions from callers;
+- make the common case simple;
+- prevent invalid or dangerous call sequences;
+- keep invariants beside the state and behavior that enforce them;
+- translate infrastructure details into domain-level outcomes; and
+- let an implementation change without rewriting callers.
 
-// good: the name is the definition
-pip_distribution: str
-```
+Avoid shallow wrappers that merely rename another API, one-caller abstractions that add navigation without hiding complexity, and pass-through layers created only to match an architecture diagram.
 
-### Proper public/private naming
+Keep cohesive internals together until independent ownership, reuse, deployment, or change cadence earns a split. A deep module may be one function, one file, or a package; directory depth is not module depth.
 
-Mark the boundary between public surface and internal implementation in whatever way the language supports (leading underscore, access modifier, module export list). Internal helpers should never look like public API.
+## Ownership and dependencies
 
-```text
-// public surface
-getUserBalance(userId)
+Things that change together should have one owner. Shared-looking code stays separate when its rules or owners can diverge; repeated logic with one authority should be centralized before it drifts.
 
-// internal — name signals "do not call from outside the module"
-_roundHalfEven(value)
-```
+- Depend on narrow public contracts, not another module's internals.
+- Introduce an interface when multiple implementations, a volatile external boundary, or an important test seam earns it.
+- Keep dependency wiring and lifecycle registration in the repository's composition root.
+- Avoid service locators and hidden mutable globals. Pass dependencies explicitly using the stack's established injection style.
+- Keep constants, query keys, schemas, and configuration with the domain or boundary that owns their meaning. Promote them to shared infrastructure only after ownership is genuinely shared.
 
-## Function Shape
+Circular dependencies usually reveal misplaced ownership. Resolve the ownership problem before adding indirection solely to break the cycle.
 
-### Function nesting at most 3
+## Data and boundaries
 
-Three levels deep is the ceiling: function body → conditional/loop → conditional/loop. A fourth level means you need to extract a helper or invert a guard.
+Validate untrusted input once at the boundary and convert it into typed internal data. Raw maps are acceptable at wire and storage edges; do not let unvalidated, shape-implicit data spread across modules.
 
-`try`, `with`, and `match` blocks count as nesting levels — same as conditionals and loops. Two nested `try` blocks in one function is a fourth level: batch-durability and per-item-isolation are separate concerns and belong in separate functions.
+Model outcomes separately when callers act differently—for example:
 
-```text
-// bad: 4 levels deep
-function f(items: Item[]) {
-  for item in items {
-    if item.active {
-      for child in item.children {
-        if child.valid { ... }   // ← 4th level
-      }
-    }
-  }
-}
+- success;
+- invalid input;
+- valid request with no result;
+- internal invariant failure; and
+- external dependency failure.
 
-// good: extract + early return
-function processActiveItems(items: Item[]) {
-  for item in items {
-    if !item.active { continue }
-    processValidChildren(item.children)
-  }
-}
+Do not collapse expected absence into an exception or hide operational failure as an empty result. Preserve the original cause and add actionable context when translating errors across a boundary.
 
-function processValidChildren(children: Node[]) {
-  for child in children {
-    if child.valid { ... }
-  }
-}
-```
+## Effects and retry safety
 
-### Single-purpose functions
+Make externally visible effects explicit. Before automatic retry, use the mechanism appropriate to the boundary: idempotency keys, uniqueness constraints, transactions, leases, deduplication, or reconciliation.
 
-One function, one job. The function name should be a verb phrase that fits on one line and fully describes the work. If you need "and" in the name, split it.
+- Define who owns commit, rollback, cleanup, and cancellation.
+- Keep state transitions explicit and reject invalid transitions.
+- Make partial failure observable and recoverable.
+- Do not hold database transactions or locks across slow network calls unless correctness requires it and the trade-off is documented.
+- Separate pure decision logic from effects when doing so makes correctness easier to test or reason about.
 
-```text
-// bad
-validateAndSaveAndNotify(user)
+## Concurrency and async work
 
-// good
-validateUser(user)
-saveUser(user)
-notifyUser(user)
-```
+Concurrency must have a correctness contract, not timing assumptions.
 
-### No control-flow cascades
+- Identify shared state and its owner.
+- Bound parallelism and queues.
+- Propagate cancellation and deadlines.
+- Define ordering and duplicate-delivery semantics.
+- Make background work durable when losing the process would otherwise lose an accepted obligation.
 
-A long `if / elif / elif / else` chain or string-keyed `switch` is a smell. Replace with dispatch tables, polymorphism, or early returns. **Exception:** exhaustive `match` / `switch` on a closed sum type or sealed enum (Rust, Kotlin, modern Java, TypeScript discriminated unions) is correct design — the compiler enforces totality and adding a new variant becomes a compile error in every branch site, which is the opposite of a smell.
+Use sequential execution when it is simpler and meets the latency or throughput requirement.
 
-```text
-// bad
-if kind == "a": ...
-elif kind == "b": ...
-elif kind == "c": ...
-elif kind == "d": ...
+## Comments and documentation
 
-// good — dispatch table
-HANDLERS = {"a": handle_a, "b": handle_b, "c": handle_c, "d": handle_d}
-HANDLERS[kind](payload)
-```
+Code explains what; comments preserve non-obvious why: constraints, trade-offs, protocol quirks, or measured reasons. Delete narration, stale history, review context, and comments that merely restate the code.
 
-## Module Shape
+Public documentation should record contract details the signature cannot express, such as invariants, side effects, ordering, errors, performance, or threading behavior. Keep it as short as the contract allows; there is no universal line limit.
 
-### Cohesion — things that change together live together
+Track future work in the repository's normal issue system. A TODO is acceptable only when the repository permits it and it includes enough ownership or locator context to be actionable.
 
-Group state and behavior by unit of change, not by directory slogan. Data and the behavior that owns its invariants should live where the same requirement change lands. A dedicated schema or models package is fine when it is just the boundary contract; the smell is an anemic domain model: behaviorless types with invariants scattered across services, helpers, and utilities.
+Load [Punchy](../../punchy/SKILL.md) when producing comments, documentation, specifications, commit messages, or reports.
 
-```text
-// bad: User type in models/user; user invariants scattered across services/, helpers/, utils/
-// good: a `user` module/package owns User invariants and operations; shared schemas stay in models/
-```
+## Minimum complexity
 
-This is the language-neutral principle behind "object-oriented organization" in OOP languages, "package cohesion" in Go, "module structure" in Rust, etc. The mechanism differs; the test does not: when one rule changes, you should touch one owning unit, not five.
+Among correct designs, choose the one a new maintainer can understand and change with the fewest concepts and moving parts. Complexity is earned by a concrete requirement, failure mode, or measured constraint.
 
-No orphan `constants` / `types` shims — colocate values with the module that owns them. In stage-sequenced folders, new files must be stages — not helper or config shims; fold helpers into the owning stage module.
+Avoid:
 
-A function with exactly one calling module lives **in that module** — never in a neighbor it happens to share a folder with. Defining `utcnow()` in `converters.py` when only `pipeline.py` calls it is a placement bug: the reader looks for pipeline concerns in the pipeline. Promote to a shared module only when a second caller actually appears.
+- speculative extension points and configuration;
+- generic frameworks for one concrete case;
+- duplicated caches or sources of truth;
+- convenience wrappers that obscure the underlying contract;
+- drive-by restructuring outside the request boundary; and
+- new dependencies when the platform or existing stack already solves the problem adequately.
 
-### Behavior on a class lives on the class
+Do not minimize the diff by weakening correctness, tests, types, observability, or recovery. Apply the full [minimal execution audit](minimal-execution.md) to nontrivial placement choices and new modules.
 
-In an OOP-first language (Python, Java, Kotlin, C#, TypeScript classes), a helper used only by one class is a **private method of that class**, not a free function in the same module. Module-level free functions are reserved for:
+## Verification
 
-1. The module's public API surface.
-2. Helpers genuinely shared across multiple classes, or that operate on no class's data.
+Verify behavior at the narrowest meaningful public seam, then broaden checks in proportion to blast radius. A change is not complete because it compiles: important failure paths, effects, and boundary serialization must also match the contract.
 
-A class with methods that call a module-scoped private helper on instance state is a smell. Move the helper inside the class. If a free function is the right call, it should still read that way — operating on plain inputs, not on one class's instance state via parameters.
-
-```text
-// bad: free helper next to the class operates on the class's input type
-class Processor {
-  run(rows: InputRow[]): OutputRecord[] {
-    return rows.map(group => buildRecord(group))
-  }
-}
-
-function buildRecord(rows: InputRow[]): OutputRecord { ... }
-function groupByKey(rows: InputRow[]): Map<string, InputRow[]> { ... }
-function latest(rows: InputRow[], field: string): unknown { ... }
-
-// good: helpers are private methods on the class that owns them
-class Processor {
-  run(rows: InputRow[]): OutputRecord[] {
-    return [...this.groupByKey(rows).values()].map(group => this.buildRecord(group))
-  }
-
-  private buildRecord(rows: InputRow[]): OutputRecord { ... }
-  private groupByKey(rows: InputRow[]): Map<string, InputRow[]> { ... }
-  private latest(rows: InputRow[], field: string): unknown { ... }
-}
-```
-
-### SOLID principles
-
-Single responsibility, open/closed, Liskov substitution, interface segregation, dependency inversion — checklist, not religion. Most violations surface as "I had to change five files to add one feature".
-
-### Deep modules — small interface, large implementation
-
-A *deep* module exposes a small interface and hides a large, valuable implementation (Unix `open`/`read`/`write`/`close`). A *shallow* module is the opposite: a large interface, little behavior — usually pass-through methods forwarding to another layer with no added value. Module-scale, not method-scale — short methods (adapters, overrides, single-purpose helpers) are fine.
-
-```text
-// shallow — 10 methods, each a 1-line wrapper around this.db
-class UserRepository {
-  get(id) { return this.db.find(id) }
-  save(u) { return this.db.upsert(u) }
-}
-
-// deep — small interface, real behavior hidden behind it
-class UserDirectory {
-  resolve(id) -> User
-  // handles caching, soft-deletes, denormalized lookups, audit logging — caller sees none of it
-}
-```
-
-Cost = interface size. Value = (useful) implementation size. Maximize the ratio.
-
-### Loose coupling between modules
-
-Modules should know as little about each other as possible: depend on narrow public contracts, pass data instead of module internals, and avoid deep imports. Introduce an interface when a volatile boundary or multiple implementations earn it. The test: can a boundary implementation change without rewriting its callers?
-
-```text
-// bad: caller knows the concrete storage backend
-report.writeToPostgres(connection)
-
-// good: caller depends on an interface
-report.writeTo(storage)   // storage can be Postgres, S3, file, in-memory
-```
-
-### Modules are blackboxes with clear I/O
-
-A module should be usable knowing only its inputs, outputs, and contracts — never its internals. If a caller has to read the implementation to use it correctly, the interface is wrong.
-
-```text
-// good: contract is self-evident
-parseIsoTimestamp(raw: string) -> datetime  // throws on malformed input
-```
-
-### Project layers are first-class citizens
-
-Top-level folders map to recognized layers **for this project type** — no cargo-cult, no new folder without a layer role. Concrete folder names and layer tables live in the stack overlay (e.g. FastAPI, React).
-
-```text
-// bad: ad-hoc folders at app root with no layer role
-// legacy/, scripts/, tmp/
-
-// good: each top-level folder maps to a recognized layer for this stack
-// (exact names depend on project — see stack overlay)
-```
-
-### One concept, one owner module
-
-One registration owner per cross-cutting concern. Splitting dependency wiring, lifecycle hooks, and holder state across multiple modules is a smell — one module should own registration, injection, and startup/shutdown for each concern. Concrete file names and injection syntax → stack overlay.
-
-```text
-// bad — DI split across modules
-import { appState } from "./holders"
-import { initApp } from "./bootstrap"
-
-// good — one module owns holders, injection, startup/shutdown, registration
-import { AppState, registerResources } from "./dependencies"
-```
-
-### One import path per symbol
-
-No re-export shims. Import from the owning module. Cross-layer imports via package public API only — not deep internals.
-
-```text
-// bad — re-exported through barrel/index shims
-import { ScoreRequest } from "myapp"
-
-// good — import from owning module
-import { ScoreRequest } from "myapp/models/score"
-```
-
-### No conjoined methods
-
-Two methods are "conjoined" when calling one without the other breaks the object: `start()` requires a later `commit()`, `open()` requires a later `close()`, `beginBatch()` requires a later `flushBatch()`. Replace with a single call (context manager, builder, transaction block) so the caller can't forget.
-
-```text
-// bad
-job.start()
-... // caller must remember
-job.commit()
-
-// good
-with job.run():
-  ...
-```
-
-## Data
-
-### No raw dicts, no magic strings
-
-Untyped maps (`dict[str, Any]`, `Map<string, any>`, `Object`) crossing module boundaries are an invitation to drift — callers don't know the shape and contracts erode. At the **boundary** (cross-module APIs, function signatures, exported types), use typed records (dataclasses, structs, Pydantic models, TypeScript interfaces). Inside a single module, or at the wire edge where JSON is the format, raw maps are fine **if you validate into typed records at the edge**. Bare string literals shared across modules belong in enums or constants.
-
-```text
-// bad: untyped map crossing a public function boundary
-update(userId: string, fields: Map) -> Map
-
-// good: typed contract at the boundary
-update(userId: string, fields: UserUpdate) -> User
-
-// fine: raw map immediately after parsing JSON, then validated
-raw = parseJson(payload)
-user = validateIntoUser(raw)   // typed from here on
-```
-
-Data models shared across modules belong to one owner selected by the stack overlay — never duplicated inline at each boundary.
-
-## Comments
-
-### Comments explain why, not what
-
-The code already says *what*. Comments exist to capture intent, constraints, or trade-offs the code cannot express: why this algorithm, why this odd-looking branch, why this non-obvious ordering. If the *why* is trivial, omit the comment — a redundant comment is overhead and a future drift surface. Never comment to narrate what the code is doing; the code is the truth, and any modern reader (human or AI) can read it. If you feel the need to explain a chunk of code, the code is probably wrong — refactor first (extract a function, rename a variable, simplify control flow) and only comment if the *why* still isn't obvious.
-
-Comments never carry metadata: no ADR/ticket/plan references, no review-thread context, no "moved from X", no decision provenance. That history lives in ADRs, commit messages, and PR threads — code states only what a maintainer needs *now*. No TODO comments — follow-up work lives in the backlog, not the source.
-
-Required one-line `why` comment when using a typed escape hatch (`any`, `!`, `Any` at the edge) — this is the SSOT the react-typescript overlay links up to.
-
-```text
-// bad — narrates what the code already says
-i += 1   // increment i
-
-// good — captures non-obvious intent
-// Use binary search: input is sorted and >100k rows; linear scan is 10x slower in practice.
-idx = binarySearch(rows, target)
-```
-
-### API documentation: concise or absent
-
-Public surfaces — modules, classes, public functions — **may** carry a docstring when it adds signal beyond the signature: the one-line contract, invariants, error behavior, side effects, ordering, performance, or threading guarantees. Never restate the name, parameter names, parameter types, or return type — the signature owns that. When the signature already tells the whole story, stay silent.
-
-Hard ceiling: **two lines maximum** for every docstring — module, class, or function. One tight sentence is the target. No paragraph prose, no project-fit narrative, and **no metadata**: no ADR/ticket/PR references, no dependency claims, no "follow-up lands later" — only statements that stay true by reading the source (see [§Comments explain why](#comments-explain-why-not-what)).
-
-Forbidden:
-
-- **Docs that paraphrase the name or fields.** If the name and types tell the story, stay quiet.
-- **Constant docs or block comments on constants.** The constant's name conveys the intent; if it doesn't, rename the constant.
-- **Private helper docs.** Name + types + body are sufficient. If they aren't, fix the name or split the body.
-- **Docs describing planned unimplemented behavior.** Implement or delete; Jira/spec owns follow-up.
-
-Documentation that narrates *what* the function does line-by-line is a future lie. Wrong docs are worse than absent.
-
-```text
-// good: whole contract in one line
-class Converter {
-  // "One source format -> faithful markdown rendition."
-}
-
-// good: concise module docstring
-// "Raw -> staged document conversion (bronze -> silver)."
-
-// bad: metadata in the docstring — rots the moment the follow-up lands
-// "Raw -> staged document conversion. Activity wiring lands in a follow-up PR."
-
-// bad: dependency claim as documentation
-// "Ingestion data contracts — pydantic + stdlib only."
-
-// bad: doc on a constant
-MAX_RETRIES = 5
-// Maximum number of retries before giving up.
-
-// bad: restates the signature
-add(a: int, b: int) -> int
-// Add two integers and return the result.
-
-// good: public API doc carries non-signature behavior
-getUserBalance(userId: string) -> Money
-// Ledger lookup for checkout authorization; throws UserNotFound for unknown ids.
-
-// good: private helper has no doc because the signature is sufficient
-_roundHalfEven(value: Decimal) -> Decimal
-```
-
-### Code reads like prose
-
-A reader should be able to skim top-to-bottom and follow the story. Order operations the way the reader thinks about them; name local variables after what they hold (`ranked_candidates`, not `result`; `normalized_rows`, not `temp`); let the structure of the code mirror the structure of the work. Complements **Names and types tell the story**: names carry the local contract at each signature; prose ordering carries the global narrative across statements.
-
-```text
-// good
-candidates = fetchCandidates(query)
-ranked = rankByRelevance(candidates)
-topThree = ranked.slice(0, 3)
-return topThree
-```
-
-### Blank lines separate logical phases
-
-Within a function, use one blank line between distinct phases such as lookup, validation, branching, and return. Do not put a blank line immediately after the function signature or split one uninterrupted operation.
-
-```text
-// bad: signature separated from its body; validation and return run together
-function resolveUser(userId: string) -> User {
-
-  user = users.get(userId)
-  if user is None { throw UserNotFound(userId) }
-  return user
-}
-
-// good: lookup, validation, return
-function resolveUser(userId: string) -> User {
-  user = users.get(userId)
-
-  if user is None { throw UserNotFound(userId) }
-
-  return user
-}
-```
-
-## Process
-
-### Punchy
-
-Load [Punchy](../../punchy/SKILL.md) for code comments, docs, commit messages, specifications, and reports.
-
-### Minimal execution
-
-Every line in the diff earns its slot. Priority stack (never invert): Correct → No new debt → Smallest surface. Audit diff before ship. Full discipline: [minimal-execution.md](minimal-execution.md).
-
-### DRY — repetition is a red flag
-
-Repeated logic with one authority and one reason to change will drift. Extract it when the shared ownership is real; similar-looking behavior with separate owners stays separate.
-
-```text
-// bad — same calculation in three files
-total = subtotal * 1.0875   // (also in invoice, cart, receipt)
-
-// good — one source of truth
-total = applySalesTax(subtotal)
-```
-
-Before introducing a constant, magic string, path, or column name, search the existing settings / config module. Configuration values live in one place; if the value already exists, import it. New constants are a last resort, not a first reach.
-
-Bind a settings getter's result to a local (`cfg = get_x_settings()`) instead of chaining the call inline across an expression — one call site, readable at every usage.
-
-Two similar blocks with different owners are not duplication. A third occurrence is a strong prompt to re-check ownership, not an automatic abstraction trigger.
-
-### No over-engineering
-
-Solve the problem in front of you, not the problem you imagine in 18 months. Speculative abstractions, configuration knobs nobody uses, and "future-proof" generics are a tax on every reader until the future arrives — and usually it doesn't.
-
-```text
-// bad — generic factory for one concrete case
-class WidgetFactoryRegistry { ... }
-
-// good
-makeWidget(spec)
-```
-
-### Fix linter smells structurally
-
-Restructure wiring smells — don't suppress them with inline ignore comments. Side-effect imports for registration → explicit call from boot/startup hook.
-
-```text
-// bad — side-effect import masked with linter ignore
-import "./wiringModule"   // linter: unused import
-
-// good — explicit registration from startup/lifespan hook
-wiringModule.registerResources()
-```
-
-### Minimum complexity
-
-Of two designs that meet the requirements, prefer the one a new reader understands faster. Fewer abstractions, fewer indirection layers, fewer moving parts. Complexity must be earned by a concrete requirement, not assumed. Sister principle to **No over-engineering**: that one says don't add scope you don't have; this one says among designs that all meet your scope, pick the simplest.
-
-```text
-// bad — three-layer abstraction for a two-line job
-strategy = StrategyResolver(StrategyConfig.default()).resolve("sum")
-result = strategy.apply(values)
-
-// good
-result = sum(values)
-```
+Report checks that failed or could not run. Never silently replace verification with confidence.

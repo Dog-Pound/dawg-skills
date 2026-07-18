@@ -1,11 +1,13 @@
 ---
 name: code-standards
-description: Code standards for writing, editing, refactoring, reviewing, and testing code. Use for code changes or reviews, including Python, FastAPI, React, TypeScript, Tailwind, and TanStack Query. Domain skills remain primary; this supplies the cross-cutting baseline. For standalone test-suite, coverage, CI, or pre-commit operation, follow repository tooling instead.
+description: Code standards for every code task. Use for writing, fixing, refactoring, designing, reviewing, or testing code; load matching Python/FastAPI or React/TypeScript/Tailwind/TanStack Query references and compose with Ponytail. Running checks alone uses repository tooling.
 ---
 
 # Code Standards
 
 Cross-cutting quality baseline. Repository, language, framework, and domain instructions own their mechanics and override this skill on concrete conflict.
+
+Load [Ponytail](../../ponytail/SKILL.md) for minimum-complexity discipline on every code task.
 
 ## Load the matching references
 
@@ -24,6 +26,6 @@ Test work also loads [testing.md](references/testing.md); then add every matchin
 ## Steps
 
 1. Trace the requested behavior through every caller and boundary it touches. Locate the existing owner and established repository pattern. Done when the root change surface is named.
-2. Choose the smallest root-cause change within that surface. For a new module or nontrivial placement choice, compare 2–3 placements using [minimal execution](references/minimal-execution.md). Done when every retained hunk passes its audit.
+2. Choose the smallest root-cause change within that surface. For a new module or nontrivial placement choice, compare 2–3 placements and audit the final diff with [minimal execution](references/minimal-execution.md). Done when the chosen placement passes every applicable audit test.
 3. Implement only the requested behavior. Done when the acceptance criteria and relevant edge cases are covered without drive-by edits.
 4. Verify with the smallest relevant tests, linters, and type checks available in the repository. Done when checks pass or every unverified item and failure is reported.

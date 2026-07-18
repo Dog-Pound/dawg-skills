@@ -1,6 +1,6 @@
 ---
 name: punchy
-description: Punchy output discipline. Use when the user requests high-signal brevity or another skill requires Punchy.
+description: Punchy writing discipline for every prose artifact. Use for documentation, comments, plans, reports, PR or commit messages, and user-facing explanations; compose with the primary task skill.
 ---
 
 # Punchy
@@ -68,16 +68,6 @@ Evidence a downstream agent would act on.
 ```
 
 Verification rule: `ran X, got Y` stays only when Y changes future action. Cut skill-loading narration and counts that only prove no finding.
-
-## Example
-
-Before:
-
-> First off, this is a thoughtful design. I reviewed it carefully and might be wrong, but five retries without backoff could amplify a downstream brownout. We should probably add backoff. Just a small note.
-
-After:
-
-> [non-blocking] Five retries without backoff (`design.md:142`) amplify downstream brownouts. Recommend exponential backoff with jitter.
 
 ## Scope
 
