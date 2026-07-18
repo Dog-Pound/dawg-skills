@@ -6,7 +6,6 @@ This repository owns the approved skill corpus distributed to downstream reposit
 
 - `.agents/skills/<name>/` owns each skill.
 - `.claude/skills/<name>` is a relative symlink to the canonical `.agents/skills/<name>` directory.
-- `skills-lock.json` records vendored skill sources; those directories change only through an upstream refresh.
 - `AGENTS.md` owns repository policy. `CLAUDE.md` stays `@AGENTS.md`.
 
 ## Required routing
@@ -25,7 +24,7 @@ These are the always-on composition rules. Each `SKILL.md` description owns all 
 2. Keep the description concise and model-facing: what the skill does, when it applies, and its nearest boundary.
 3. Keep `SKILL.md` as the smallest reliable interface. Disclose branch-specific reference behind explicit context pointers.
 4. Keep each rule in one authoritative location. Prune duplication, no-ops, sediment, and sprawl.
-5. Put local behavior in repository policy or repo-owned skills. Refresh vendored skills through the native Skills CLI.
+5. Put local behavior in repository policy or repo-owned skills. Replace vendored skills only from their upstream source.
 
 ## Completion
 
