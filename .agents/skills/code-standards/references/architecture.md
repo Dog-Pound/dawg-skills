@@ -39,11 +39,11 @@ Circular dependencies usually reveal misplaced ownership. Resolve ownership befo
 
 ## Design defaults
 
-Default to objects and classes for domain behavior. Prefer composition to inheritance. Use functions for pure local transformations.
+Default to objects and classes for domain behavior. Prefer composition to inheritance. Use functions for pure local transformations. Introduce an abstract base class when substitutable implementations or a real extension boundary earns it; keep a single implementation concrete otherwise.
 
 Use established patterns when their responsibilities exist:
 
-- A Registry owns explicit registration, duplicate validation, stable-key lookup, and unknown-key failure across multiple implementations. Construct it at the composition root.
+- A Registry owns explicit registration, duplicate validation, stable-key lookup, and unknown-key failure across multiple implementations. The composition root constructs the Registry and registers every implementation; imports only define implementations.
 - A DAO is the persistence boundary and owns persistence operations and storage translation. Another persistence abstraction requires distinct authority or behavior.
 - A DTO carries validated boundary data without business behavior.
 

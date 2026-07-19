@@ -1,10 +1,25 @@
 # Filesystem Contract
 
-The planned tree is part of every code change's design contract and any review of file or module placement. Compress a trivial one-file change to one line; use the full map for everything else.
+The planned tree is part of every code change's design contract and any review of file or module placement. Compress a trivial one-file change to one line; use trees for everything else.
 
 ## Before code
 
-Declare the target tree and classify every known file as Add, Modify, Delete, or Affected.
+Show the relevant existing pattern, then the target tree. Annotate every known file with a brief `add`, `change`, `move`, `delete`, or `affected` phrase that states what changes. The package shape should make ownership and reused patterns visible without a separate topology essay.
+
+```text
+Existing pattern
+
+src/core/operations/
+├── models.py             operation contracts
+└── registry.py           explicit registration
+
+Target
+
+src/core/evaluation/
+├── models.py             move — make Evaluation first-class
+├── pipeline.py           change — resolve evaluators through Registry
+└── registry.py           add — own registration and lookup
+```
 
 Every added file names:
 
@@ -23,6 +38,6 @@ Plans describe intent, not module names. Compare the proposed file with extendin
 | Ownership | Does it have one reason to change and one discoverable owner? |
 | Depth | Does its interface hide enough behavior to earn another boundary? |
 | Smaller | Can an existing owner express the same behavior with fewer moving parts? |
-| Drift | Does the actual tree match the planned Add/Modify/Delete/Affected map? |
+| Drift | Does the actual tree match the annotated target tree? |
 
 During Verify, reconcile the planned and actual trees. An unexplained file or placement returns the work to Decide.
