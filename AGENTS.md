@@ -8,6 +8,10 @@ This repository owns the approved skill corpus distributed to downstream reposit
 - `npx skills` creates downstream agent projections and lock state.
 - `AGENTS.md` owns repository policy. `CLAUDE.md` stays `@AGENTS.md`.
 
+## Issue tracker
+
+Every issue has a GitHub issue type. Set it when creating or first touching the issue.
+
 <!-- dawg-skills:routing:start -->
 ## Operating posture
 

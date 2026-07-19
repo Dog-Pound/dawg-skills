@@ -9,8 +9,11 @@ Language-neutral test-quality baseline. Language and framework overlays own runn
 | Unit | One public module contract with controlled inputs | Local behavior and edge cases |
 | Integration | Crosses one or more real in-process or infrastructure boundaries | Components are wired and exchange the right data |
 | E2E | Full deployed stack, browser, or live system boundary | A critical user journey works in its real shape |
+| Eval | Probabilistic behavior against representative and adversarial cases | Quality meets explicit grader criteria and thresholds |
 
 Use the cheapest seam that fails for the risk under test. Crossing two internal modules is integration even when it runs quickly; exercising an HTTP-shaped function in memory is not automatically E2E.
+
+A regression is not a test level. Put it at the cheapest seam that reproduces the real failure with sufficient fidelity. Optimize for confidence per test, not test count or coverage percentage. Add the smallest set that distinguishes consequential behaviors, boundaries, and failure modes; remove tests that duplicate the same evidence.
 
 Before adding a test, name the behavior, observable seam, and failure it should catch. The test belongs at that seam when a plausible broken implementation fails it and lower-level coverage cannot prove the same contract more cheaply.
 
@@ -29,7 +32,11 @@ verify actual == expected
 
 Derive expected values from the contract or controlled dependency input—not by rereading the implementation's source or copying fields from `actual`.
 
-Prefer whole-value equality when the full result is deterministic and meaningful. Multiple assertions are fine when they describe facets of one outcome; split the test when the properties represent independent behaviors.
+Prefer whole-value equality when the full result is deterministic and meaningful.
+
+A unit test proves one behavior with exactly one assertion construct. Prefer a direct `result == expected` comparison. When the behavior has several observations, compare one transparent tuple, record, DTO, map, or existing result object; do not hide multiple assertions in a helper. An exception matcher counts as the assertion construct.
+
+An integration test proves behavior across a critical seam. It may use multiple assertions when response, persisted state, emitted effects, or other observations jointly prove that behavior. Prefer one structured comparison when it remains clearer; do not force artificial aggregation.
 
 Use the strongest meaningful assertion:
 
@@ -40,9 +47,9 @@ Use the strongest meaningful assertion:
 
 Inject clocks, random generators, and ID factories when their values are part of the behavior. When injection adds more design cost than signal, assert the stable contract around the nondeterministic field.
 
-## One behavior per test
+## Behavioral tests
 
-One behavior means one input/output contract, not one assertion or field. Consolidate related fields into one expected structure; split unrelated outcomes.
+One unit-test behavior means one input/output contract, not one field. Consolidate related fields into one expected structure; split unrelated outcomes. An integration behavior may span every observable facet of the selected seam.
 
 ```text
 test("report summarizes statuses and totals") {
@@ -87,6 +94,8 @@ An integration test makes its real boundary explicit: application graph, databas
 
 Use production serialization, migrations, and adapters at the selected real boundary. Do not mock the database library while claiming to test database integration.
 
+Name the critical seam and the behavior or failure it owns. Common consequential seams include persistence, serialization, external adapters, queues, filesystems, packaging, authentication, transactions, retries, ordering, and partial failure. Do not test every interface mechanically.
+
 ## E2E and smoke
 
 Write E2E when all three gates pass:
@@ -102,6 +111,25 @@ Keep a fast smoke subset for deployment health and a broader suite for scheduled
 - Sandbox vendors unless the vendor boundary is the contract under test.
 - Capture logs, traces, responses, screenshots, or HAR before teardown.
 - Fix deterministic flakes at the root. Quarantine only as a short, owned incident response with an expiry.
+
+## Evals
+
+Use evals for probabilistic behavior. Define representative and adversarial cases, explicit grader criteria, and an acceptance threshold. Test deterministic eval datasets, runners, aggregation, and graders with ordinary unit or integration tests.
+
+## Distribution and defaults
+
+When distribution is part of the contract, prove the consumer path:
+
+```text
+source tree
+  → built release artifact
+  → isolated regular install
+  → installed entry point
+  → primary command with real defaults
+  → observable result
+```
+
+Run outside the checkout when source shadowing is possible. Editable installs, test-only overrides, injected configuration, imports, and `--help` do not prove packaged contents or default behavior.
 
 ## Failure patterns
 
