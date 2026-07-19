@@ -20,6 +20,7 @@ Load every matching row completely before performing that branch. Rows accumulat
 | Behavioral change, test selection, or test changes | [testing.md](references/testing.md) |
 | Python | [python.md](references/python.md) |
 | Pytest | [testing.md](references/testing.md) and [pytest.md](references/pytest.md) |
+| Hypothesis present or explicitly requested | [testing.md](references/testing.md), [python.md](references/python.md), and [hypothesis.md](references/hypothesis.md) |
 | Pydantic or pydantic-settings | [pydantic.md](references/pydantic.md) |
 | FastAPI | [python.md](references/python.md), [pydantic.md](references/pydantic.md), and [fastapi.md](references/fastapi.md) |
 | FastAPI tests | [testing.md](references/testing.md) and [fastapi-testing.md](references/fastapi-testing.md) |
