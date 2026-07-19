@@ -2,21 +2,23 @@
 
 A curated skill collection for agentic software development.
 
-## Install
+## Sync
 
-```bash
-npx skills add Dog-Pound/dawg-skills --skill '*' --agent codex claude-code -y
+Add this target to each downstream `Makefile`:
+
+```make
+.PHONY: skills-sync
+DAWG_SKILLS_SOURCE ?= Dog-Pound/dawg-skills
+
+skills-sync:
+	npx skills add $(DAWG_SKILLS_SOURCE) --skill '*' --agent codex claude-code -y
+	node .agents/skills/dawg-routing/scripts/sync-agents.mjs
 ```
 
-This installs every skill for Codex and Claude Code. To make the baseline routing mandatory, copy [Required routing](AGENTS.md#required-routing) into the downstream repository's `AGENTS.md`.
+Run `make skills-sync`. It installs the entire corpus and safely synchronizes the managed routing block in `AGENTS.md`.
 
-Pull future updates with:
+CI verifies routing without modifying files:
 
 ```bash
-npx skills update -p -y
+node .agents/skills/dawg-routing/scripts/sync-agents.mjs --check
 ```
-
-## Structure
-
-- `.agents/skills/` is canonical.
-- `.claude/skills/` contains Claude symlinks.
