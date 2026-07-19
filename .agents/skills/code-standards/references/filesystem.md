@@ -29,6 +29,15 @@ Every added file names:
 
 Plans describe intent, not module names. Compare the proposed file with extending the owner and keeping the behavior inline. A label such as “clean separation” does not justify a boundary.
 
+## Command wrappers
+
+Keep `Makefile` as the thinnest wrapper around repository commands. Put their implementation in a top-level `scripts/` directory at the same depth; Make targets only call those scripts.
+
+```text
+Makefile                   thin targets
+scripts/                   command implementation
+```
+
 ## Audit
 
 | Test | Question |
