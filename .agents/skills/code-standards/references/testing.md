@@ -1,21 +1,46 @@
 # Testing Standards
 
-Language-neutral test-quality baseline. Language and framework overlays own runner syntax, markers, directories, and boundary-specific fixtures.
+Language-neutral test-design authority. Workflow skills own process; language and framework overlays own runner syntax, markers, directories, and boundary-specific fixtures.
+
+## Model material risk
+
+Choose tests against a named failure risk:
+
+- **Impact** — what users, data, money, security, or operations lose if it occurs.
+- **Plausibility** — how likely the implementation, integration, or environment is to produce it.
+- **Detection gap** — how likely existing checks and observability are to miss it before harm.
+
+Prioritize risks high on these dimensions. A green suite is evidence against the modeled risks, not proof of total reliability. Record material residual risk when faithful proof is unavailable or deliberately deferred.
 
 ## Choose the seam by failure mode
 
-| Level | Scope | Proves |
+| Proof level | Scope | Proves |
 |---|---|---|
 | Unit | One public module contract with controlled inputs | Local behavior and edge cases |
 | Integration | Crosses one or more real in-process or infrastructure boundaries | Components are wired and exchange the right data |
 | E2E | Full deployed stack, browser, or live system boundary | A critical user journey works in its real shape |
-| Eval | Probabilistic behavior against representative and adversarial cases | Quality meets explicit grader criteria and thresholds |
 
-Use the cheapest seam that fails for the risk under test. Crossing two internal modules is integration even when it runs quickly; exercising an HTTP-shaped function in memory is not automatically E2E.
+Unit, integration, and E2E are the proof levels. Regression names a test's purpose; smoke names a fast subset. Evals are a separate discipline for probabilistic quality.
 
-A regression is not a test level. Put it at the cheapest seam that reproduces the real failure with sufficient fidelity. Optimize for confidence per test, not test count or coverage percentage. Add the smallest set that distinguishes consequential behaviors, boundaries, and failure modes; remove tests that duplicate the same evidence.
+Use the cheapest seam that fails for the risk under test with enough production fidelity. Crossing two internal modules is integration even when it runs quickly; exercising an HTTP-shaped function in memory is not automatically E2E.
+
+Optimize for confidence per test, not test count or coverage percentage. Add the smallest set that distinguishes consequential behaviors, boundaries, and failure modes; remove tests that duplicate the same evidence.
 
 Before adding a test, name the behavior, observable seam, and failure it should catch. The test belongs at that seam when a plausible broken implementation fails it and lower-level coverage cannot prove the same contract more cheaply.
+
+## Environment ownership
+
+A hermetic test owns or controls every input and dependency needed for repeatable execution. An external-dependent test names the service, environment, data, credentials, availability, cleanup, and failure owner it relies on. Accidental network, clock, process, filesystem, locale, environment-variable, or shared-state dependence is a defect.
+
+Substitutes prove behavior shared by their enforced contract; they do not prove production wiring, configuration, permissions, protocol quirks, quotas, or vendor compatibility. A production-specific risk requires the production implementation or the provider's official test environment.
+
+For each material third-party boundary, select risk-appropriate evidence:
+
+- hermetic tests for owned outcomes such as request construction, response translation, retries, and failure handling;
+- external compatibility tests for the real protocol and current provider behavior; and
+- E2E for critical journeys whose risk survives lower seams.
+
+Select only layers justified by the risk.
 
 ## Arrange, act, compare
 
@@ -34,9 +59,9 @@ Derive expected values from the contract or controlled dependency input—not by
 
 Prefer whole-value equality when the full result is deterministic and meaningful.
 
-A unit test proves one behavior with exactly one assertion construct. Prefer a direct `result == expected` comparison. When the behavior has several observations, compare one transparent tuple, record, DTO, map, or existing result object; do not hide multiple assertions in a helper. An exception matcher counts as the assertion construct.
+One behavior—not one assertion—is the unit of a test. For a unit test, that means one input/output contract, not one field. Prefer a direct `result == expected` comparison. When the behavior has several observations, compare one transparent tuple, record, DTO, map, or existing result object; keep assertions visible in the test.
 
-An integration test proves behavior across a critical seam. It may use multiple assertions when response, persisted state, emitted effects, or other observations jointly prove that behavior. Prefer one structured comparison when it remains clearer; do not force artificial aggregation.
+An integration test proves behavior across a critical seam. Use multiple assertions when response, persisted state, emitted effects, or other observations jointly prove that behavior; otherwise prefer one structured comparison.
 
 Use the strongest meaningful assertion:
 
@@ -49,7 +74,7 @@ Inject clocks, random generators, and ID factories when their values are part of
 
 ## Behavioral tests
 
-One unit-test behavior means one input/output contract, not one field. Consolidate related fields into one expected structure; split unrelated outcomes. An integration behavior may span every observable facet of the selected seam.
+Consolidate related fields into one expected structure; split unrelated outcomes. An integration behavior may span every observable facet of the selected seam.
 
 ```text
 test("report summarizes statuses and totals") {
@@ -86,7 +111,7 @@ When arrange/act/compare repeats with only inputs and expected outputs changing,
 
 Keep setup local while one test owns it. Promote factories, builders, and fixtures to the nearest shared test owner after a second use. Shared setup exposes intent through domain names and returns fresh mutable state per test.
 
-Prefer builders and public APIs over shared seed state. Parallel tests namespace external data and clean up only what they own.
+Prefer builders and public APIs over shared seed state. Parallel tests isolate mutable state, namespace external resources by worker, and clean up only what they own.
 
 ## Integration tests
 
@@ -115,6 +140,16 @@ Keep a fast smoke subset for deployment health and a broader suite for scheduled
 ## Evals
 
 Use evals for probabilistic behavior. Define representative and adversarial cases, explicit grader criteria, and an acceptance threshold. Test deterministic eval datasets, runners, aggregation, and graders with ordinary unit or integration tests.
+
+## Generative and structural searchlights
+
+Use property-based testing when a broad input space has stable invariants, algebraic properties, round trips, parser boundaries, or many interacting edge cases. Use model-based testing when state transitions or operation sequences can be checked against a simpler domain model. Example tests remain clearer for a small, known case set.
+
+Coverage is a searchlight for unexamined behavior, not a quality target. Inspect consequential uncovered paths and branch gaps; a percentage cannot establish correctness.
+
+Use mutation testing only when a stable, consequential unit suite may assert too weakly and the expected diagnostic value justifies its runtime and maintenance cost. Surviving mutants prompt review of the risk model or assertion, not mechanical test multiplication.
+
+Treat unexpected warnings as failures or explicit review items. Filter a warning only when its cause is understood and the filter is narrow, owned, and time-bounded when temporary.
 
 ## Distribution and defaults
 
