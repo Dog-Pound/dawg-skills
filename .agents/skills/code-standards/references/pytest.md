@@ -1,6 +1,6 @@
 # Pytest Standards
 
-Repository package layout, pytest configuration, async support, and event-loop scope are authoritative. Tests import through the production package contract; changing `sys.path` or `PYTHONPATH` to make imports pass hides packaging defects.
+Repository package layout, pytest configuration, async support, and event-loop scope are authoritative. Tests import through the production package contract; keep `sys.path` and `PYTHONPATH` unchanged so packaging defects remain visible.
 
 ## Fixtures and cleanup
 
@@ -8,7 +8,7 @@ Keep a fixture beside its nearest real owner: local test module first, then the 
 
 Register cleanup immediately after each state-changing setup step succeeds so later setup failure cannot skip it. Prefer `yield` for one acquired resource and `request.addfinalizer` or an `ExitStack` when acquisition is incremental.
 
-Fixtures return fresh mutable state. A broader scope earns explicit proof that shared state is immutable, reset safely, or intentionally shared.
+A broader fixture scope earns explicit proof that shared state is immutable, reset safely, or intentionally shared.
 
 ## Parameterization
 
@@ -23,7 +23,6 @@ Use `@pytest.mark.parametrize` when rows exercise one behavior contract with dif
 | Observe logs | `caplog` |
 | Observe stdout/stderr | `capsys` or `capfd` |
 | Stable warnings contract | `pytest.warns` |
-| Cleanup registration | `request.addfinalizer` |
 
 Use these built-ins before a plugin or custom helper. A hook or new plugin requires a demonstrated suite-infrastructure need; do not add one as a convenience catalog choice.
 
@@ -31,7 +30,7 @@ Use these built-ins before a plugin or custom helper. A hook or new plugin requi
 
 Patch the binding consumed by the subject, which may differ from where the object was defined. Prefer a real lightweight object or small fake when its state makes the assertion clearer.
 
-Use `autospec` or `spec_set` when interface drift is a material risk. Use `AsyncMock` for an awaited contract. Otherwise keep the patch minimal; call order and counts remain assertions only when observable behavior depends on them.
+Use `autospec` or `spec_set` when interface drift is a material risk. Use `AsyncMock` for an awaited contract.
 
 ## Outcomes
 
@@ -48,4 +47,4 @@ Use the repository's async support and loop-scope policy. Missing async support 
 
 ## Parallel execution
 
-Establish serial correctness first. Parallel-safe tests isolate mutable state, namespace external resources by worker, and clean up only what they own. Enable parallel execution only after measurement shows a useful improvement; ordering-dependent failures remain defects.
+Establish serial correctness first. Enable parallel execution only after measurement shows a useful improvement; ordering-dependent failures remain defects.

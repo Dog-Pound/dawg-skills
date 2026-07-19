@@ -20,4 +20,4 @@ Keep the failing example reproducible through Hypothesis's example database and 
 
 Use rule-based state machines when failures emerge from operation sequences. Define operations at public seams, preconditions from valid domain states, and invariants over observable outcomes. Model idempotency, ordering, retries, and invalid transitions when those are material risks.
 
-Keep the model simpler than the system under test and reset owned state between runs. Preserve Hypothesis's minimized failing operation trace as the primary diagnostic; add a fixed regression only when it improves durable intent.
+Keep the model simpler than the system under test and reset owned state between runs. Preserve Hypothesis's minimized failing operation trace as the primary diagnostic.

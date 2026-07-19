@@ -10,7 +10,7 @@ Choose tests against a named failure risk:
 - **Plausibility** — how likely the implementation, integration, or environment is to produce it.
 - **Detection gap** — how likely existing checks and observability are to miss it before harm.
 
-Prioritize risks high on these dimensions, then use the cheapest faithful seam that can detect each one. A green suite is evidence against the modeled risks, not proof of total reliability. Record material residual risk when faithful proof is unavailable or deliberately deferred.
+Prioritize risks high on these dimensions. A green suite is evidence against the modeled risks, not proof of total reliability. Record material residual risk when faithful proof is unavailable or deliberately deferred.
 
 ## Choose the seam by failure mode
 
@@ -24,7 +24,7 @@ Unit, integration, and E2E are the proof levels. Regression names a test's purpo
 
 Use the cheapest seam that fails for the risk under test with enough production fidelity. Crossing two internal modules is integration even when it runs quickly; exercising an HTTP-shaped function in memory is not automatically E2E.
 
-Put a regression at the cheapest seam that reproduces the real failure with sufficient fidelity. Optimize for confidence per test, not test count or coverage percentage. Add the smallest set that distinguishes consequential behaviors, boundaries, and failure modes; remove tests that duplicate the same evidence.
+Optimize for confidence per test, not test count or coverage percentage. Add the smallest set that distinguishes consequential behaviors, boundaries, and failure modes; remove tests that duplicate the same evidence.
 
 Before adding a test, name the behavior, observable seam, and failure it should catch. The test belongs at that seam when a plausible broken implementation fails it and lower-level coverage cannot prove the same contract more cheaply.
 
@@ -40,7 +40,7 @@ For each material third-party boundary, select risk-appropriate evidence:
 - external compatibility tests for the real protocol and current provider behavior; and
 - E2E for critical journeys whose risk survives lower seams.
 
-State omitted layers as material residual risk; do not imply that every boundary needs all three.
+Select only layers justified by the risk.
 
 ## Arrange, act, compare
 
@@ -59,9 +59,9 @@ Derive expected values from the contract or controlled dependency input—not by
 
 Prefer whole-value equality when the full result is deterministic and meaningful.
 
-A test's unit is one behavior, not one assertion. For a unit test, that means one input/output contract, not one field. Prefer a direct `result == expected` comparison. When the behavior has several observations, compare one transparent tuple, record, DTO, map, or existing result object; do not hide assertions in a helper.
+One behavior—not one assertion—is the unit of a test. For a unit test, that means one input/output contract, not one field. Prefer a direct `result == expected` comparison. When the behavior has several observations, compare one transparent tuple, record, DTO, map, or existing result object; keep assertions visible in the test.
 
-An integration test proves behavior across a critical seam. It may use multiple assertions when response, persisted state, emitted effects, or other observations jointly prove that behavior. Prefer one structured comparison when it remains clearer; do not force artificial aggregation.
+An integration test proves behavior across a critical seam. Use multiple assertions when response, persisted state, emitted effects, or other observations jointly prove that behavior; otherwise prefer one structured comparison.
 
 Use the strongest meaningful assertion:
 
@@ -111,7 +111,7 @@ When arrange/act/compare repeats with only inputs and expected outputs changing,
 
 Keep setup local while one test owns it. Promote factories, builders, and fixtures to the nearest shared test owner after a second use. Shared setup exposes intent through domain names and returns fresh mutable state per test.
 
-Prefer builders and public APIs over shared seed state. Parallel tests namespace external data and clean up only what they own.
+Prefer builders and public APIs over shared seed state. Parallel tests isolate mutable state, namespace external resources by worker, and clean up only what they own.
 
 ## Integration tests
 
