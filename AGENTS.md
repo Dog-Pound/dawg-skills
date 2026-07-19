@@ -12,6 +12,8 @@ This repository owns the approved skill corpus distributed to downstream reposit
 
 Every issue has a GitHub issue type. Set it when creating or first touching the issue.
 
+Every implementation PR body includes `Closes #<number>` for each completed issue, so merge closes the issues.
+
 Issues live in GitHub and are tracked in Dog-Pound’s DPS Planning project. See `docs/agents/issue-tracker.md`.
 
 ## Triage labels
