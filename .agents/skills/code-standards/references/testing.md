@@ -131,6 +131,8 @@ source tree
 
 Run outside the checkout when source shadowing is possible. Editable installs, test-only overrides, injected configuration, imports, and `--help` do not prove packaged contents or default behavior.
 
+An install using `--no-deps` or separately supplied runtime dependencies proves the artifact path, not a regular consumer install. Report the regular-install seam blocked when dependency resolution cannot run.
+
 ## Failure patterns
 
 | Pattern | Why it lies | Replacement |

@@ -15,6 +15,7 @@ Names, types, and signatures expose the contract without implementation lookup.
 - Narrow untyped escape hatches at their boundary and state the external reason when one remains.
 - Use domain types when primitives have different rules or units.
 - Mark public and private surfaces with the language's native mechanism.
+- Callers in another module use the owner's public contract; promote the operation or move the caller instead of reaching through a private name.
 - Keep one stable public import path per symbol.
 - Let the package path supply context. Inside `api/handlers/`, prefer `user.py` to `user_handler.py`; keep exported class names explicit where they travel without that path.
 - Name methods so `receiver.action(...)` states the behavior without reading the body.

@@ -32,11 +32,13 @@ These are the always-on composition rules. Each `SKILL.md` description owns all 
 
 ## Skill changes
 
+Only `code-standards`, `punchy`, and `dawg-routing` are repository-owned and writable. Treat every other skill as read-only vendor content replaced only from its upstream source.
+
 1. Read `writing-great-skills/SKILL.md`, its glossary, the target skill, and every affected reference completely.
 2. Keep the description concise and model-facing: what the skill does, when it applies, and its nearest boundary.
 3. Keep `SKILL.md` as the smallest reliable interface. Disclose branch-specific reference behind explicit context pointers.
 4. Keep each rule in one authoritative location. Prune duplication, no-ops, sediment, and sprawl.
-5. Put local behavior in repository policy or repo-owned skills. Replace vendored skills only from their upstream source.
+5. Put local behavior in repository policy or repo-owned skills.
 
 ## Completion
 

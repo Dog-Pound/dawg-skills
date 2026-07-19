@@ -16,6 +16,8 @@ Order modules for reading: imports, constants, public types and behavior, then p
 
 When these concepts exist, give them direct owners named `models.py`, `dao.py`, `errors.py`, and `enums.py`. Create each file when it has behavior or contracts to own. Prefix private modules, constants, functions, attributes, and implementation details with `_`.
 
+Keep settings and environment parsing in `config.py`; keep domain and runtime models in `models.py`, including models constructed from configuration input.
+
 ## Types
 
 - Use builtin generics: `list[T]`, `dict[K, V]`, `tuple[T, ...]`.
