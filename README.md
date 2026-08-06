@@ -19,13 +19,6 @@ Put the command in the sibling top-level `scripts/` directory:
 set -euo pipefail
 
 npx skills add Dog-Pound/dawg-skills --skill '*' --agent codex claude-code -y
-node .agents/skills/dawg-routing/scripts/sync-agents.mjs
 ```
 
-Run `make skills-sync`. It installs the entire corpus and safely synchronizes the managed routing block in `AGENTS.md`.
-
-CI verifies routing without modifying files:
-
-```bash
-node .agents/skills/dawg-routing/scripts/sync-agents.mjs --check
-```
+Run `make skills-sync` to install the entire corpus.
