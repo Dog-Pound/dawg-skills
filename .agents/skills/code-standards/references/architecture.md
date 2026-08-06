@@ -23,6 +23,8 @@ Prefer boundaries that:
 
 Keep cohesive internals together until independent ownership, reuse, deployment, or change cadence earns a split.
 
+A module has one coherent responsibility. Split it when it combines distinct owners or failure policies such as public orchestration, subprocess protocol, domain models, errors, enums, parsing, schema validation, binding resolution, and runtime execution. Keep related concepts together when a split would only create layers or future extension points. Create `models`, `errors`, or `enums` modules only when those concepts have real contracts to own; keep non-API implementation modules explicitly private.
+
 Shallow wrappers, pass-through layers, and one-caller abstractions add navigation without hiding complexity. Deepen the existing owner or keep the behavior inline.
 
 ## Ownership and dependencies
@@ -30,7 +32,7 @@ Shallow wrappers, pass-through layers, and one-caller abstractions add navigatio
 Things that change together have one owner. Repeated logic with one authority is centralized before it drifts; similar code with independently changing rules stays separate.
 
 - Depend on narrow public contracts rather than another module's internals.
-- Introduce an interface for multiple implementations, a volatile external boundary, or a meaningful test seam.
+- Introduce an interface only when at least two real implementations exist.
 - Keep dependency wiring and lifecycle registration in the composition root.
 - Pass dependencies explicitly through the repository's established injection style; keep mutable state with an explicit owner.
 - Keep constants, schemas, query keys, and configuration with the owner of their meaning.
@@ -39,7 +41,7 @@ Circular dependencies usually reveal misplaced ownership. Resolve ownership befo
 
 ## Design defaults
 
-Default to objects and classes for domain behavior. Prefer composition to inheritance. Use functions for pure local transformations. Introduce an abstract base class when substitutable implementations or a real extension boundary earns it; keep a single implementation concrete otherwise.
+Default to concrete objects and classes when they give domain behavior clear ownership. Prefer composition to inheritance and functions for pure local transformations. A single implementation stays concrete: protocols, interfaces, abstract base classes, factories, registries, and provider abstractions require at least two real implementations.
 
 Use established patterns when their responsibilities exist:
 

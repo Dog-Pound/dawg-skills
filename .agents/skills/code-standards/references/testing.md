@@ -24,9 +24,18 @@ Unit, integration, and E2E are the proof levels. Regression names a test's purpo
 
 Use the cheapest seam that fails for the risk under test with enough production fidelity. Crossing two internal modules is integration even when it runs quickly; exercising an HTTP-shaped function in memory is not automatically E2E.
 
-Optimize for confidence per test, not test count or coverage percentage. Add the smallest set that distinguishes consequential behaviors, boundaries, and failure modes; remove tests that duplicate the same evidence.
+Testing is risk-selected; TDD is opt-in. Add or retain a test only when it:
+
+1. names a material behavior, boundary, invariant, regression, or operational contract;
+2. owns a failure signal not better owned elsewhere;
+3. has an independent enough oracle to reject a plausible wrong implementation; and
+4. justifies its runtime, fixture, review, diagnosis, and maintenance cost.
+
+Do not add tests for coverage, branch count, or production-code churn alone. Optimize for confidence per test: retain the smallest set that distinguishes consequential behaviors, boundaries, and failure modes, and remove tests that duplicate evidence.
 
 Before adding a test, name the behavior, observable seam, and failure it should catch. The test belongs at that seam when a plausible broken implementation fails it and lower-level coverage cannot prove the same contract more cheaply.
+
+Behavior changes require discrimination evidence: replay a known-bad implementation, apply a focused mutant or fault injection, run a property or differential check, or provide an equivalent demonstration that the test rejects a plausible wrong implementation. Strict red-green-refactor applies only when a consequential-risk gate explicitly selects TDD.
 
 ## Environment ownership
 
@@ -120,6 +129,10 @@ An integration test makes its real boundary explicit: application graph, databas
 Use production serialization, migrations, and adapters at the selected real boundary. Do not mock the database library while claiming to test database integration.
 
 Name the critical seam and the behavior or failure it owns. Common consequential seams include persistence, serialization, external adapters, queues, filesystems, packaging, authentication, transactions, retries, ordering, and partial failure. Do not test every interface mechanically.
+
+## Placement
+
+Mirror source paths exactly: `backend/tests/{unit,integration,e2e}/<source path>/test_<source-file>.py`. Put a test at the lowest level that owns its contract; retain one integration test at a meaningful public seam only when it proves cross-boundary behavior. Test public behavior, not private implementation structure.
 
 ## E2E and smoke
 

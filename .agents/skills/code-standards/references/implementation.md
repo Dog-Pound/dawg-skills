@@ -11,6 +11,7 @@ Code reads like well-written prose: the module supplies context, the class is th
 Names, types, and signatures expose the contract without implementation lookup.
 
 - Name values for their domain role: `invoice_rows`, not `data`; `retry_deadline`, not `timeout` when the distinction matters.
+- Name boundary values for what they are in that boundary: an OS process result is an `...ExitStatus`; a Temporal-facing failure is a named error class. Replace vague `runner`, `binding`, `schema`, `data`, `utils`, and `manager` names unless their local scope makes the meaning precise.
 - Type public inputs, outputs, and models in typed languages.
 - Narrow untyped escape hatches at their boundary and state the external reason when one remains.
 - Use domain types when primitives have different rules or units.
@@ -21,6 +22,8 @@ Names, types, and signatures expose the contract without implementation lookup.
 - Name methods so `receiver.action(...)` states the behavior without reading the body.
 
 Short local names are appropriate when a small scope supplies their meaning.
+
+Compatibility machinery stays behind a private boundary. Keep `legacy` out of public names and retain existing behavior until a ticket explicitly authorizes removal.
 
 ## Functions and control flow
 
@@ -36,6 +39,14 @@ Trace a defect through every caller to the owner of the broken invariant. Fix th
 
 Self-documenting names, types, and control flow carry the explanation. Comments preserve non-obvious constraints, tradeoffs, protocol quirks, and measured reasons.
 
+Formatter and linter success is mechanical evidence, not a readability verdict. A human-readable diff groups imports and declarations coherently, uses whitespace between concepts, keeps control flow uncompressed, and lets each function be understood without excessive scrolling. Dense multi-responsibility blocks, giant functions or files, and ambiguous names block approval rather than becoming style nits.
+
+## Scope and operational boundaries
+
+Every hunk proves the ticket or an explicit compatibility obligation. Keep adjacent cleanup, architecture migrations, API rewrites, build-command reorganization, unrelated smoke changes, and future-ticket work out of the diff. Preserve existing behavior unless the ticket changes it; fix a shared invariant once at its owner and add the smallest durable regression proof for affected sibling callers.
+
+Preserve validation, data integrity, cancellation, timeouts, error handling, and secret redaction at trust and operational boundaries. Resource limits, sandboxing, and policy machinery require a ticketed contract; otherwise record them as explicit non-goals. Credentials stay out of logs, traces, errors, test output, commands, and PR text.
+
 ## Documentation
 
 Code must remain as understandable with every docstring removed. Keep a docstring to one line normally and two lines maximum when a public contract needs information the signature cannot express. Comments explain non-obvious reasons, constraints, protocol quirks, and measured tradeoffs; they do not narrate behavior.
@@ -50,7 +61,7 @@ Load [Punchy](../../punchy/SKILL.md) for comments, documentation, specifications
 
 One branch and PR deliver one atomic feature, fix, chore, refactor, documentation change, or test change. Follow repository branch conventions; otherwise use an accurate conventional prefix such as `feat/`, `fix/`, `chore/`, `refactor/`, `docs/`, or `test/`.
 
-Count every human-authored addition and deletion, including tests, configuration, migrations, and documentation. Target at most 600 changed lines. More than 1,000 requires evidence that the atomic change cannot be split safely, explicit PR rationale, and a reviewer-approved review strategy. Generated output does not count.
+Count every human-authored addition and deletion, including tests, configuration, migrations, and documentation. Target at most 600 changed lines. A larger diff includes a review map stating why it cannot be split further, which files are moves or extractions versus new behavior, the reading order, and the tests proving each important boundary. More than 1,000 also requires reviewer approval of that strategy. Generated output does not count.
 
 ## Verification
 
